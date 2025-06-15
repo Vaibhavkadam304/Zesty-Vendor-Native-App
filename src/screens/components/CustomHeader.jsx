@@ -19,7 +19,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 10,
-    backgroundColor: '#fff',
+    // backgroundColor: '#fff',
+    justifyContent:'flex-end',
   },
   menuButton: {
     padding: 10,

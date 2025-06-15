@@ -22,6 +22,10 @@ allprojects {
     repositories {
         google()
         mavenCentral()
+         // Stripe SDK
+        maven {
+            url "https://storage.googleapis.com/rn-stripe-releases/"
+        }
     }
 
     // ✅ Force compatible Jackson version to avoid Java 21 error
