@@ -9,54 +9,9 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
-  PermissionsAndroid,
   Platform,
 } from 'react-native';
 import { useStripeTerminal } from '@stripe/stripe-terminal-react-native';
-// import { NfcManager } from 'react-native-nfc-manager';
-// NfcManager.isSupported().then(supported => console.log('NFC Supported:', supported));
-async function requestBluetoothPermissions() {
-  if (Platform.OS === 'android') {
-    const fine = await PermissionsAndroid.request(
-      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      {
-        title: 'Location Permission Required',
-        message:
-          'Stripe Terminal needs location permission to scan for Bluetooth readers.',
-        buttonPositive: 'OK',
-      }
-    );
-    if (fine !== PermissionsAndroid.RESULTS.GRANTED) {
-      throw new Error('Location permission not granted');
-    }
-
-    if (Platform.Version >= 31) {
-      const scan = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
-        {
-          title: 'Bluetooth Scan Permission',
-          message: 'Required to discover Bluetooth readers.',
-          buttonPositive: 'OK',
-        }
-      );
-      if (scan !== PermissionsAndroid.RESULTS.GRANTED) {
-        throw new Error('Bluetooth Scan permission not granted');
-      }
-
-      const connect = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
-        {
-          title: 'Bluetooth Connect Permission',
-          message: 'Required to connect to Bluetooth readers.',
-          buttonPositive: 'OK',
-        }
-      );
-      if (connect !== PermissionsAndroid.RESULTS.GRANTED) {
-        throw new Error('Bluetooth Connect permission not granted');
-      }
-    }
-  }
-}
 
 const POSScreen = () => {
   const [amount, setAmount] = useState('');
@@ -66,6 +21,7 @@ const POSScreen = () => {
 
   const {
     initialize,
+    registerReader,
     discoverReaders,
     connectReader,
     createPaymentIntent,
@@ -83,6 +39,19 @@ const POSScreen = () => {
       try {
         await initialize();
         setIsInitialized(true);
+        console.log("✅ Stripe Terminal Initialized");
+
+        // 🔑 Register this device as a Tap to Pay reader
+        const { reader, error } = await registerReader({
+          location: 'tml_GEv5yQX1NQSw8p',
+        });
+
+        if (error) {
+          console.error('❌ RegisterReader error:', error);
+          Alert.alert('Register Error', error.message);
+        } else {
+          console.log('✅ Reader registered:', reader);
+        }
       } catch (err) {
         console.error('❌ Init error:', err);
         Alert.alert('Init Error', err.message);
@@ -92,73 +61,69 @@ const POSScreen = () => {
   }, [initialize]);
 
   const handleTapToPay = async () => {
-  if (!isInitialized) {
-    Alert.alert('Stripe Terminal not initialized yet. Please wait...');
-    return;
-  }
-
-  if (!amount || isNaN(amount)) {
-    Alert.alert('Please enter a valid amount');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    await requestBluetoothPermissions();
-
-    const { error: discErr } = await discoverReaders({
-      discoveryMethod: 'bluetoothScan',
-      simulated: true,
-    });
-    if (discErr) throw new Error(discErr.message);
-
-    await new Promise((r) => setTimeout(r, 1000));
-    if (!readers.length) throw new Error('No readers found');
-    const reader = readers[0];
-
-    const { error: connErr } = await connectReader(reader);
-    if (connErr) throw new Error(connErr.message);
-    console.log(`🔌 Connected to ${reader.serialNumber}`);
-
-    // ✅ Get PaymentIntent from your backend
-    const res = await fetch('http://192.168.1.6:3000/create_payment_intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        amount: Math.round(parseFloat(amount) * 100),
-        locationId: 'tml_simulated',
-      }),
-    });
-    const { paymentIntent } = await res.json();
-    if (!paymentIntent?.client_secret) {
-      throw new Error('Failed to create PaymentIntent');
+    if (!isInitialized) {
+      Alert.alert('Stripe Terminal not initialized yet. Please wait...');
+      return;
     }
 
-    // ✅ Collect card details
-    const { error: collectErr } = await collectPaymentMethod({
-      paymentIntent: { client_secret: paymentIntent.client_secret },
-    });
-    if (collectErr) throw new Error(collectErr.message);
-
-    // ✅ Confirm the payment
-    const { paymentIntent: result, error: procErr } = await processPayment({
-      paymentIntent: { id: paymentIntent.id },
-    });
-    if (procErr) throw new Error(procErr.message);
-
-    if (result.status === 'succeeded') {
-      Alert.alert('Payment Success', `$${(result.amount / 100).toFixed(2)} charged.`);
-    } else {
-      throw new Error(`Payment failed with status: ${result.status}`);
+    if (!amount || isNaN(amount)) {
+      Alert.alert('Please enter a valid amount');
+      return;
     }
-  } catch (err) {
-    console.error('Tap to Pay Error:', err);
-    Alert.alert('Error', err.message || 'Unknown error occurred');
-  } finally {
-    setLoading(false);
-  }
-};
 
+    setLoading(true);
+    try {
+      const { error: discErr } = await discoverReaders({
+        discoveryMethod: 'internet',
+        simulated: false,
+      });
+      if (discErr) throw new Error(discErr.message);
+
+      await new Promise((r) => setTimeout(r, 1000));
+      if (!readers.length) throw new Error('No readers found');
+      const reader = readers[0];
+
+      const { error: connErr } = await connectReader(reader);
+      if (connErr) throw new Error(connErr.message);
+      console.log(`🔌 Connected to ${reader.serialNumber}`);
+
+      const res = await fetch('https://zestybakers.com/wp-json/zesty-terminal/v1/create_payment_intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account: 'acct_1QSwkKEFbZzG2qIK',
+          amount: Math.round(parseFloat(amount) * 100),
+          locationId: 'tml_GEv5yQX1NQSw8p'
+        }),
+      });
+
+      const { paymentIntent } = await res.json();
+      if (!paymentIntent?.client_secret) {
+        throw new Error('Failed to create PaymentIntent');
+      }
+
+      const { error: collectErr } = await collectPaymentMethod({
+        paymentIntent: { client_secret: paymentIntent.client_secret },
+      });
+      if (collectErr) throw new Error(collectErr.message);
+
+      const { paymentIntent: result, error: procErr } = await processPayment({
+        paymentIntent: { id: paymentIntent.id },
+      });
+      if (procErr) throw new Error(procErr.message);
+
+      if (result.status === 'succeeded') {
+        Alert.alert('Payment Success', `$${(result.amount / 100).toFixed(2)} charged.`);
+      } else {
+        throw new Error(`Payment failed with status: ${result.status}`);
+      }
+    } catch (err) {
+      console.error('Tap to Pay Error:', err);
+      Alert.alert('Error', err.message || 'Unknown error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>

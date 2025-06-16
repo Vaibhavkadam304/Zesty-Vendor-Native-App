@@ -38,9 +38,9 @@ const theme = {
 };
 
 // ← helper to fetch your connection token
-const fetchConnectionToken = async () => {
+/*const fetchConnectionToken = async () => {
   try {
-    const res = await fetch('http://192.168.1.6:3000/connection_token', {
+    const res = await fetch('http://192.168.0.184:3000/connection_token', {
       method: 'POST',
     });
     if (!res.ok) {
@@ -53,7 +53,19 @@ const fetchConnectionToken = async () => {
     console.error('❌ fetchConnectionToken error:', err);
     throw err; // rethrow so the SDK sees the failure
   }
-};
+};*/
+
+async function fetchConnectionToken() {
+  const connectedAccountId = 'acct_1QSwkKEFbZzG2qIK';  // For your vendor
+
+  const response = await fetch(
+    `https://zestybakers.com/wp-json/zesty-terminal/v1/connection_token?account=${connectedAccountId}`,
+    { method: 'POST' }
+  );
+
+  const { secret } = await response.json();
+  return secret;
+}
 
 function AppDrawer() {
   return (
@@ -100,7 +112,7 @@ export default function App() {
     <StripeTerminalProvider
       tokenProvider={fetchConnectionToken}
       logLevel="info"
-      simulated={true}
+      simulated={false}
     >
       <PaperProvider theme={theme}>
         <NavigationContainer>
